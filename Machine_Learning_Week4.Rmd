@@ -1,0 +1,120 @@
+---
+title: "Machine_Learning_Week4"
+author: "Yogesh Godbole"
+date: "June 1, 2018"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+##Introduction
+One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, your goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants.
+
+##Import Libraries
+```{r}
+library(caret)
+library(rpart)
+library(rpart.plot)
+library(randomForest)
+library(corrplot)
+```
+##Download the Data
+
+```{r}
+trainUrl <-"https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"
+testUrl <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"
+trainFile <- "pml-training.csv"
+testFile  <- "pml-testing.csv"
+if (!file.exists(trainFile)) {
+  download.file(trainUrl, destfile=trainFile)
+}
+if (!file.exists(testFile)) {
+  download.file(testUrl, destfile=testFile)
+}
+```
+
+##Read the Data
+```{r}
+trainRaw <- read.csv("pml-training.csv")
+testRaw <- read.csv("pml-testing.csv")
+```
+
+##Clean the data
+Then, we will clean the data and get rid of observations with missing values as well as some meaningless variables.
+```{r}
+sum(complete.cases(trainRaw))
+```
+
+First of all, we get rid of columns with NA missing values.
+```{r}
+trainRaw <- trainRaw[, colSums(is.na(trainRaw)) == 0] 
+testRaw <- testRaw[, colSums(is.na(testRaw)) == 0] 
+```
+Second, we get rid of some columns without contributing much to the accelerometer measurements.
+```{r}
+classe <- trainRaw$classe
+trainRemove <- grepl("^X|timestamp|window", names(trainRaw))
+trainRaw <- trainRaw[, !trainRemove]
+trainCleaned <- trainRaw[, sapply(trainRaw, is.numeric)]
+trainCleaned$classe <- classe
+testRemove <- grepl("^X|timestamp|window", names(testRaw))
+testRaw <- testRaw[, !testRemove]
+testCleaned <- testRaw[, sapply(testRaw, is.numeric)]
+```
+Finally, the cleaned training data set contains 19,622 observations and 53 variables while the testing data set contains 20 observations and 53 variables. The "classe" variable is still in the cleaned training set.
+
+##Slice the data
+Then, we will clean the data and get rid of observations with missing values as well as some meaningless variables.
+```{r}
+set.seed(22519) # For reproducibile purpose
+inTrain <- createDataPartition(trainCleaned$classe, p=0.70, list=F)
+trainData <- trainCleaned[inTrain, ]
+testData <- trainCleaned[-inTrain, ]
+```
+
+##Data Modeling
+We could fit a predictive model for activity recognition using Random Forest algorithm. Ther reason is that this algorithm could automatically selects important variables and would be robust to correlate covariates & outliers in general. We will use 5-fold cross validation when applying the algorithm.
+```{r}
+controlRf <- trainControl(method="cv", 5)
+modelRf <- train(classe ~ ., data=trainData, method="rf", trControl=controlRf, ntree=250)
+modelRf
+```
+
+```{r}
+predictRf <- predict(modelRf, testData)
+confusionMatrix(testData$classe, predictRf)
+```
+
+
+
+```{r}
+accuracy <- postResample(predictRf, testData$classe)
+accuracy
+```
+
+##Predicting for Test Data Set
+After getting rid of the problem_id column, we could apply this model to the original testing data set.
+
+```{r}
+result <- predict(modelRf, testCleaned[, -length(names(testCleaned))])
+result
+```
+
+##Appendix: Figures
+1. Correlation Matrix Visualization
+
+```{r}
+corrPlot <- cor(trainData[, -length(names(trainData))])
+corrplot(corrPlot, method="shade", tl.cex=0.6, tl.srt = 45, tl.col = "black")
+```
+
+2. Decision Tree Visualization
+
+```{r}
+treeModel <- rpart(classe ~ ., data=trainData, method="class")
+prp(treeModel) # fast plot
+```
+
+
